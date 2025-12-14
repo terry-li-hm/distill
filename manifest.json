@@ -5,5 +5,5 @@
   "minAppVersion": "1.5.0",
   "description": "Refine web articles into atomic notes through structured ChatGPT-Claude dialogue.",
   "author": "Terry Li",
-  "isDesktopOnly": true
+  "isDesktopOnly": false
 }

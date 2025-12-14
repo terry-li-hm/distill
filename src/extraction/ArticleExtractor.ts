@@ -1,18 +1,7 @@
 import { Readability } from "@mozilla/readability";
-import { parseHTML } from "linkedom";
 import { ExtractedArticle } from "../types";
 import { requestUrl } from "obsidian";
 import { URL_VALIDATION } from "../constants";
-
-/**
- * Type definition for linkedom's Document-like object
- * This allows proper typing without unsafe assertions
- */
-interface LinkedomDocument {
-  documentElement: unknown;
-  body: unknown;
-  // Readability only needs these basic properties
-}
 
 /**
  * Validation result for URL parsing
@@ -124,12 +113,12 @@ export class ArticleExtractor {
   }
 
   private parseArticle(html: string, url: URL): ExtractedArticle {
-    // Parse HTML using linkedom
-    const { document } = parseHTML(html);
+    // Parse HTML using native DOMParser (works on both desktop and mobile)
+    const parser = new DOMParser();
+    const document = parser.parseFromString(html, "text/html");
 
     // Use Readability to extract article content
-    // Note: linkedom's document is compatible with Readability's requirements
-    const reader = new Readability(document as LinkedomDocument as Document, {
+    const reader = new Readability(document, {
       charThreshold: 100,
     });
 
