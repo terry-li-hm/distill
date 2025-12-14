@@ -1,7 +1,6 @@
-import { requestUrl } from "obsidian";
-import { ChatMessage, ModelRole } from "../types";
-
-const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+import { requestUrl, RequestUrlResponse } from "obsidian";
+import { ChatMessage, ModelRole, CancellationToken } from "../types";
+import { API } from "../constants";
 
 export interface OpenRouterConfig {
   apiKey: string;
@@ -23,6 +22,24 @@ interface OpenRouterResponse {
     completion_tokens: number;
     total_tokens: number;
   };
+  error?: {
+    message: string;
+    code: number;
+  };
+}
+
+/**
+ * Error class for API-specific errors with status code information
+ */
+export class OpenRouterError extends Error {
+  constructor(
+    message: string,
+    public readonly statusCode: number,
+    public readonly isRetryable: boolean
+  ) {
+    super(message);
+    this.name = "OpenRouterError";
+  }
 }
 
 export class OpenRouterClient {
@@ -34,14 +51,60 @@ export class OpenRouterClient {
   }
 
   /**
-   * Send a chat completion request to OpenRouter
+   * Send a chat completion request to OpenRouter with retry logic
    */
-  async chat(role: ModelRole, messages: ChatMessage[]): Promise<string> {
+  async chat(
+    role: ModelRole,
+    messages: ChatMessage[],
+    cancellation?: CancellationToken
+  ): Promise<string> {
     const model = role === "drafter" ? this.config.drafterModel : this.config.criticModel;
 
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < API.MAX_RETRIES; attempt++) {
+      if (cancellation?.cancelled) {
+        throw new Error("Cancelled");
+      }
+
+      try {
+        const result = await this.makeRequest(model, messages);
+        this.callCount++;
+        return result;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error("Unknown error");
+
+        // Check if error is retryable
+        if (error instanceof OpenRouterError && error.isRetryable) {
+          // Calculate delay with exponential backoff and jitter
+          const delay = Math.min(
+            API.RETRY_BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 1000,
+            API.RETRY_MAX_DELAY_MS
+          );
+
+          // Wait before retry
+          await this.sleep(delay);
+          continue;
+        }
+
+        // Non-retryable error, throw immediately
+        throw error;
+      }
+    }
+
+    // All retries exhausted
+    throw lastError || new Error("Request failed after maximum retries");
+  }
+
+  /**
+   * Make a single API request
+   */
+  private async makeRequest(model: string, messages: ChatMessage[]): Promise<string> {
+    let response: RequestUrlResponse;
+
     try {
-      const response = await requestUrl({
-        url: OPENROUTER_API_URL,
+      response = await requestUrl({
+        url: API.OPENROUTER_URL,
         method: "POST",
         headers: {
           "Authorization": `Bearer ${this.config.apiKey}`,
@@ -52,48 +115,80 @@ export class OpenRouterClient {
         body: JSON.stringify({
           model: model,
           messages: messages,
-          temperature: 0.7,
-          max_tokens: 4096,
+          temperature: API.TEMPERATURE,
+          max_tokens: API.MAX_TOKENS,
         }),
       });
-
-      if (response.status !== 200) {
-        const errorText = response.text || "Unknown error";
-        throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
-      }
-
-      const data = response.json as OpenRouterResponse;
-      this.callCount++;
-
-      if (!data.choices || data.choices.length === 0) {
-        throw new Error("No response from model");
-      }
-
-      const content = data.choices[0].message.content;
-      if (!content) {
-        throw new Error("Empty response from model");
-      }
-
-      return content;
     } catch (error) {
-      if (error instanceof Error) {
-        // Check for common error patterns
-        if (error.message.includes("401")) {
-          throw new Error("Invalid API key. Please check your OpenRouter API key in settings.");
-        }
-        if (error.message.includes("402")) {
-          throw new Error("Insufficient credits. Please add credits to your OpenRouter account.");
-        }
-        if (error.message.includes("429")) {
-          throw new Error("Rate limited. Please wait a moment and try again.");
-        }
-        if (error.message.includes("503")) {
-          throw new Error("Model temporarily unavailable. Please try again or select a different model.");
-        }
-        throw error;
-      }
-      throw new Error("Unknown API error");
+      // Network error or request failed to send
+      throw new OpenRouterError(
+        "Network error: Failed to connect to OpenRouter",
+        0,
+        true // Network errors are retryable
+      );
     }
+
+    // Handle HTTP errors based on status code
+    if (response.status !== 200) {
+      this.handleHttpError(response);
+    }
+
+    // Parse response
+    const data = response.json as OpenRouterResponse;
+
+    // Check for API-level errors in response body
+    if (data.error) {
+      throw new OpenRouterError(
+        data.error.message || "API error",
+        data.error.code || response.status,
+        false
+      );
+    }
+
+    // Validate response structure
+    if (!data.choices || data.choices.length === 0) {
+      throw new OpenRouterError("No response from model", response.status, false);
+    }
+
+    const content = data.choices[0].message.content;
+    if (!content) {
+      throw new OpenRouterError("Empty response from model", response.status, false);
+    }
+
+    return content;
+  }
+
+  /**
+   * Handle HTTP error responses with proper status code detection
+   */
+  private handleHttpError(response: RequestUrlResponse): never {
+    const status = response.status;
+    const isRetryable = (API.RETRYABLE_STATUS_CODES as readonly number[]).includes(status);
+
+    // Map status codes to user-friendly messages
+    const errorMessages: Record<number, string> = {
+      400: "Bad request. The model ID may be invalid.",
+      401: "Invalid API key. Please check your OpenRouter API key in settings.",
+      402: "Insufficient credits. Please add credits to your OpenRouter account.",
+      403: "Access forbidden. Your API key may not have access to this model.",
+      404: "Model not found. Please select a different model in settings.",
+      429: "Rate limited. Retrying...",
+      500: "OpenRouter server error. Please try again.",
+      502: "Bad gateway. OpenRouter may be experiencing issues.",
+      503: "Service temporarily unavailable. Retrying...",
+      504: "Gateway timeout. Retrying...",
+    };
+
+    const message = errorMessages[status] || `Request failed with status ${status}`;
+
+    throw new OpenRouterError(message, status, isRetryable);
+  }
+
+  /**
+   * Sleep for specified milliseconds
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**

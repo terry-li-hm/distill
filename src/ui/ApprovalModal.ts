@@ -2,6 +2,7 @@ import { App, Modal, Notice } from "obsidian";
 import type DistillPlugin from "../main";
 import { InboxWriter } from "../output/InboxWriter";
 import { ExtractedArticle, AtomicNote } from "../types";
+import { CONTENT } from "../constants";
 
 export class ApprovalModal extends Modal {
   private plugin: DistillPlugin;
@@ -98,7 +99,7 @@ export class ApprovalModal extends Modal {
 
     // Content preview
     const preview = noteContent.createDiv({ cls: "distill-note-preview" });
-    preview.setText(this.truncateText(note.content, 200));
+    preview.setText(this.truncateText(note.content, CONTENT.PREVIEW_TRUNCATE_LENGTH));
 
     // Validation indicators
     if (!note.hasLink) {

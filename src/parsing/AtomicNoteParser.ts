@@ -1,4 +1,5 @@
 import { AtomicNote, ValidationResult } from "../types";
+import { CONTENT } from "../constants";
 
 export class AtomicNoteParser {
   /**
@@ -68,20 +69,20 @@ export class AtomicNoteParser {
     const issues: string[] = [];
 
     // Check heading quality
-    if (note.heading.length < 10) {
+    if (note.heading.length < CONTENT.MIN_HEADING_LENGTH) {
       issues.push("Heading is too short to be descriptive");
     }
 
-    if (note.heading.length > 100) {
+    if (note.heading.length > CONTENT.MAX_HEADING_LENGTH) {
       issues.push("Heading is too long");
     }
 
     // Check content quality
-    if (note.content.length < 50) {
+    if (note.content.length < CONTENT.MIN_CONTENT_LENGTH) {
       issues.push("Content is too brief");
     }
 
-    if (note.content.length > 1000) {
+    if (note.content.length > CONTENT.MAX_CONTENT_LENGTH) {
       issues.push("Content may not be atomic (too long)");
     }
 
@@ -101,7 +102,7 @@ export class AtomicNoteParser {
 
     // Check for multiple paragraphs (not atomic)
     const paragraphs = note.content.split(/\n\n+/).filter((p) => p.trim());
-    if (paragraphs.length > 2) {
+    if (paragraphs.length > CONTENT.MAX_PARAGRAPHS) {
       issues.push("Contains multiple paragraphs (may not be atomic)");
     }
 

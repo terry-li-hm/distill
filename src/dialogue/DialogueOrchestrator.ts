@@ -110,4 +110,19 @@ export class DialogueOrchestrator {
       };
     }
   }
+
+  /**
+   * Reset the orchestrator state for a new dialogue
+   * Useful when reusing the orchestrator for multiple articles
+   */
+  reset(): void {
+    this.client.resetCallCount();
+  }
+
+  /**
+   * Get the current API call count
+   */
+  getApiCallCount(): number {
+    return this.client.getCallCount();
+  }
 }

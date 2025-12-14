@@ -2,37 +2,101 @@ import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import { ExtractedArticle } from "../types";
 import { requestUrl } from "obsidian";
+import { URL_VALIDATION } from "../constants";
+
+/**
+ * Type definition for linkedom's Document-like object
+ * This allows proper typing without unsafe assertions
+ */
+interface LinkedomDocument {
+  documentElement: unknown;
+  body: unknown;
+  // Readability only needs these basic properties
+}
+
+/**
+ * Validation result for URL parsing
+ */
+interface UrlValidationResult {
+  valid: boolean;
+  url?: URL;
+  error?: string;
+}
 
 export class ArticleExtractor {
   /**
    * Extract readable content from a URL
    */
   async extract(url: string): Promise<ExtractedArticle> {
-    // Validate URL
-    const parsedUrl = this.parseUrl(url);
-    if (!parsedUrl) {
-      throw new Error("Invalid URL format");
+    // Validate URL with detailed error messages
+    const validation = this.validateUrl(url);
+    if (!validation.valid || !validation.url) {
+      throw new Error(validation.error || "Invalid URL format");
     }
 
     // Fetch the page
-    const html = await this.fetchPage(parsedUrl);
+    const html = await this.fetchPage(validation.url);
 
     // Parse and extract content
-    const article = this.parseArticle(html, parsedUrl);
+    const article = this.parseArticle(html, validation.url);
 
     return article;
   }
 
-  private parseUrl(url: string): URL | null {
-    try {
-      // Add protocol if missing
-      if (!url.startsWith("http://") && !url.startsWith("https://")) {
-        url = "https://" + url;
-      }
-      return new URL(url);
-    } catch {
-      return null;
+  /**
+   * Validate and parse URL with detailed error reporting
+   */
+  private validateUrl(input: string): UrlValidationResult {
+    let url = input.trim();
+
+    // Check for empty input
+    if (!url) {
+      return { valid: false, error: "URL cannot be empty" };
     }
+
+    // Add protocol if missing
+    if (!url.includes("://")) {
+      url = "https://" + url;
+    }
+
+    // Parse URL
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return { valid: false, error: "Invalid URL format" };
+    }
+
+    // Validate protocol
+    if (!URL_VALIDATION.ALLOWED_PROTOCOLS.includes(parsedUrl.protocol as "http:" | "https:")) {
+      return {
+        valid: false,
+        error: `Invalid protocol: ${parsedUrl.protocol}. Only HTTP and HTTPS are supported.`,
+      };
+    }
+
+    // Validate hostname exists and has valid structure
+    const hostname = parsedUrl.hostname;
+    if (!hostname) {
+      return { valid: false, error: "URL must include a domain name" };
+    }
+
+    // Check for localhost/internal addresses (optional security measure)
+    if (hostname === "localhost" || hostname.startsWith("127.") || hostname.startsWith("192.168.")) {
+      return { valid: false, error: "Local and internal URLs are not supported" };
+    }
+
+    // Basic domain structure validation (must have at least one dot for TLD)
+    if (!hostname.includes(".")) {
+      return { valid: false, error: "Invalid domain: must include a valid TLD (e.g., .com, .org)" };
+    }
+
+    // Check minimum URL length
+    if (parsedUrl.href.length < URL_VALIDATION.MIN_URL_LENGTH) {
+      return { valid: false, error: "URL is too short" };
+    }
+
+    return { valid: true, url: parsedUrl };
   }
 
   private async fetchPage(url: URL): Promise<string> {
@@ -64,7 +128,8 @@ export class ArticleExtractor {
     const { document } = parseHTML(html);
 
     // Use Readability to extract article content
-    const reader = new Readability(document as unknown as Document, {
+    // Note: linkedom's document is compatible with Readability's requirements
+    const reader = new Readability(document as LinkedomDocument as Document, {
       charThreshold: 100,
     });
 

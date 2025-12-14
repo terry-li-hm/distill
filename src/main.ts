@@ -21,12 +21,10 @@ export default class DistillPlugin extends Plugin {
 
     // Add settings tab
     this.addSettingTab(new DistillSettingsTab(this.app, this));
-
-    console.log("Distill loaded");
   }
 
   onunload(): void {
-    console.log("Distill unloaded");
+    // Cleanup if needed
   }
 
   private distillArticle(): void {

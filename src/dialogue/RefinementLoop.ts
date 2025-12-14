@@ -6,6 +6,7 @@ import {
   ProgressCallback,
   CancellationToken,
 } from "../types";
+import { DIALOGUE } from "../constants";
 
 export interface RefinementResult {
   notes: AtomicNote[];
@@ -53,16 +54,22 @@ Evaluate each note for:
 4. **Appropriate scope**: Is it truly atomic (single insight) or compound?
 5. **Heading quality**: Does the heading describe the insight, not just the topic?
 
-If ALL notes meet these criteria and are ready for use, respond with exactly:
-APPROVED
+If ALL notes meet these criteria and are ready for use, respond with ONLY the word "APPROVED" on the first line.
 
-If only minor polish is possible but not necessary, respond with:
-MARGINAL
+If only minor polish is possible but not necessary, respond with ONLY the word "MARGINAL" on the first line, then briefly note what could be slightly better.
 
-Then briefly note what could be slightly better.
+If improvements are needed, provide specific, actionable feedback for each note that needs revision. Be direct about what's wrong and how to fix it. Do NOT start with "APPROVED" or "MARGINAL" if changes are needed.`;
 
-If improvements are needed, provide specific, actionable feedback for each note that needs revision. Be direct about what's wrong and how to fix it.`;
-
+/**
+ * RefinementLoop manages the draft-critique-revise cycle for atomic notes.
+ *
+ * Flow:
+ * 1. Drafter (GPT) creates initial atomic notes based on aligned interpretation
+ * 2. Critic (Claude) reviews notes against quality criteria
+ * 3. If approved/marginal, we're done
+ * 4. If needs work, drafter revises based on critique
+ * 5. Repeat until approved or max rounds reached
+ */
 export class RefinementLoop {
   private client: OpenRouterClient;
   private parser: AtomicNoteParser;
@@ -76,6 +83,12 @@ export class RefinementLoop {
 
   /**
    * Run the draft-critique-revise loop
+   *
+   * @param article - The source article for context
+   * @param interpretation - The aligned interpretation to base notes on
+   * @param onProgress - Optional callback for progress updates
+   * @param cancellation - Optional token to cancel the operation
+   * @returns RefinementResult with final notes and approval status
    */
   async run(
     article: ExtractedArticle,
@@ -83,7 +96,7 @@ export class RefinementLoop {
     onProgress?: ProgressCallback,
     cancellation?: CancellationToken
   ): Promise<RefinementResult> {
-    // Step 1: Initial draft from ChatGPT
+    // Step 1: Initial draft from drafter
     onProgress?.({
       phase: "drafting",
       message: "Drafting atomic notes...",
@@ -98,9 +111,11 @@ export class RefinementLoop {
       .replace("{interpretation}", interpretation)
       .replace("{url}", article.url);
 
-    let currentDraft = await this.client.chat("drafter", [
-      { role: "user", content: draftPrompt },
-    ]);
+    let currentDraft = await this.client.chat(
+      "drafter",
+      [{ role: "user", content: draftPrompt }],
+      cancellation
+    );
 
     if (cancellation?.cancelled) {
       throw new Error("Cancelled");
@@ -122,23 +137,25 @@ export class RefinementLoop {
         throw new Error("Cancelled");
       }
 
-      // Get critique from Claude
+      // Get critique from critic
       const critiquePrompt = CRITIQUE_PROMPT
         .replace("{title}", article.title)
         .replace("{notes}", currentDraft);
 
-      const critique = await this.client.chat("critic", [
-        { role: "user", content: critiquePrompt },
-      ]);
+      const critique = await this.client.chat(
+        "critic",
+        [{ role: "user", content: critiquePrompt }],
+        cancellation
+      );
 
       if (cancellation?.cancelled) {
         throw new Error("Cancelled");
       }
 
-      // Check if approved or marginal
+      // Check if approved or marginal (strict matching)
       const status = this.parseCritiqueStatus(critique);
 
-      if (status === "approved") {
+      if (status === "approved" || status === "marginal") {
         return {
           notes: currentNotes,
           rounds: round + 1,
@@ -146,16 +163,7 @@ export class RefinementLoop {
         };
       }
 
-      if (status === "marginal") {
-        // Marginal improvements only - accept current draft
-        return {
-          notes: currentNotes,
-          rounds: round + 1,
-          approved: true,
-        };
-      }
-
-      // Need revision - send critique to ChatGPT
+      // Need revision - send critique to drafter
       round++;
 
       if (round >= this.maxRounds) {
@@ -173,11 +181,15 @@ export class RefinementLoop {
         .replace("{critique}", critique)
         .replace("{notes}", currentDraft);
 
-      currentDraft = await this.client.chat("drafter", [
-        { role: "user", content: draftPrompt },
-        { role: "assistant", content: currentDraft },
-        { role: "user", content: revisionPrompt },
-      ]);
+      currentDraft = await this.client.chat(
+        "drafter",
+        [
+          { role: "user", content: draftPrompt },
+          { role: "assistant", content: currentDraft },
+          { role: "user", content: revisionPrompt },
+        ],
+        cancellation
+      );
 
       if (cancellation?.cancelled) {
         throw new Error("Cancelled");
@@ -194,15 +206,26 @@ export class RefinementLoop {
     };
   }
 
+  /**
+   * Parse critique response to determine status
+   * Uses strict matching: response must START with the keyword
+   * This prevents false positives from incidental mentions
+   */
   private parseCritiqueStatus(critique: string): "approved" | "marginal" | "needs_work" {
-    const upperCritique = critique.toUpperCase().trim();
+    const trimmedUpper = critique.trim().toUpperCase();
 
-    if (upperCritique.startsWith("APPROVED") || upperCritique === "APPROVED") {
-      return "approved";
+    // Check if response STARTS with approval keyword
+    for (const keyword of DIALOGUE.APPROVAL_KEYWORDS) {
+      if (trimmedUpper.startsWith(keyword)) {
+        return "approved";
+      }
     }
 
-    if (upperCritique.startsWith("MARGINAL") || upperCritique.includes("MARGINAL")) {
-      return "marginal";
+    // Check if response STARTS with marginal keyword
+    for (const keyword of DIALOGUE.MARGINAL_KEYWORDS) {
+      if (trimmedUpper.startsWith(keyword)) {
+        return "marginal";
+      }
     }
 
     return "needs_work";
