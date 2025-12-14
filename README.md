@@ -23,7 +23,7 @@ Distill uses a multi-phase AI dialogue to extract high-quality atomic notes from
 1. Clone this repository into your vault's `.obsidian/plugins/` directory:
    ```bash
    cd /path/to/vault/.obsidian/plugins/
-   git clone https://github.com/yourusername/distill.git
+   git clone https://github.com/terry-li-hm/distill.git
    ```
 
 2. Install dependencies and build:
