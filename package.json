@@ -1,0 +1,31 @@
+{
+  "name": "distill",
+  "version": "0.1.0",
+  "description": "Refine web articles into atomic notes through structured ChatGPT-Claude dialogue",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "ai",
+    "atomic-notes",
+    "chatgpt",
+    "claude"
+  ],
+  "author": "Terry Li",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "0.20.2",
+    "obsidian": "^1.5.0",
+    "typescript": "5.4.5"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.5.0",
+    "linkedom": "^0.18.0"
+  }
+}

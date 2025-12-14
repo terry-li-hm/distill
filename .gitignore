@@ -1,0 +1,20 @@
+# Build output (included in releases, but not in source control during dev)
+main.js
+
+# Dependencies
+node_modules/
+
+# User data
+data.json
+
+# Development
+.hotreload
+
+# OS files
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,9 @@
+{
+  "id": "distill",
+  "name": "Distill",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Refine web articles into atomic notes through structured ChatGPT-Claude dialogue.",
+  "author": "Terry Li",
+  "isDesktopOnly": true
+}
