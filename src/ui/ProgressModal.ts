@@ -7,6 +7,7 @@ import {
   ProgressUpdate,
   createCancellationToken,
   CancellationToken,
+  DialogueTranscript,
 } from "../types";
 
 export class ProgressModal extends Modal {
@@ -95,7 +96,15 @@ export class ProgressModal extends Modal {
 
       // Close progress modal and open approval modal
       this.close();
-      new ApprovalModal(this.app, this.plugin, this.article, result.atomicNotes).open();
+      new ApprovalModal(
+        this.app,
+        this.plugin,
+        this.article,
+        result.atomicNotes,
+        result.transcript,
+        result.state.interpretationRounds,
+        result.state.refinementRounds
+      ).open();
     } catch (error) {
       if (this.cancellation.cancelled) {
         return;

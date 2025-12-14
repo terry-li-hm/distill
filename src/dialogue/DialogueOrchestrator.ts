@@ -8,6 +8,7 @@ import {
   DialogueState,
   ProgressCallback,
   CancellationToken,
+  DialogueTranscript,
 } from "../types";
 
 export class DialogueOrchestrator {
@@ -47,6 +48,11 @@ export class DialogueOrchestrator {
       refinementRounds: 0,
     };
 
+    const transcript: DialogueTranscript = {
+      interpretation: [],
+      refinement: [],
+    };
+
     try {
       // Phase 1: Interpretation alignment
       onProgress?.({
@@ -67,6 +73,7 @@ export class DialogueOrchestrator {
       state.claudeInterpretation = interpretationResult.claudeInterpretation;
       state.alignedInterpretation = interpretationResult.alignedInterpretation;
       state.phase = "aligned";
+      transcript.interpretation = interpretationResult.transcript;
 
       if (cancellation?.cancelled) {
         throw new Error("Cancelled");
@@ -90,12 +97,14 @@ export class DialogueOrchestrator {
       state.refinementRounds = refinementResult.rounds;
       state.currentDraft = refinementResult.notes;
       state.phase = "complete";
+      transcript.refinement = refinementResult.transcript;
 
       return {
         article,
         state,
         atomicNotes: refinementResult.notes,
         totalApiCalls: this.client.getCallCount(),
+        transcript,
       };
     } catch (error) {
       state.phase = "error";
@@ -107,6 +116,7 @@ export class DialogueOrchestrator {
         state,
         atomicNotes: state.currentDraft || [],
         totalApiCalls: this.client.getCallCount(),
+        transcript,
       };
     }
   }

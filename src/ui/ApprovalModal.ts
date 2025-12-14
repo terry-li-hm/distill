@@ -1,7 +1,7 @@
 import { App, Modal, Notice } from "obsidian";
 import type DistillPlugin from "../main";
 import { InboxWriter } from "../output/InboxWriter";
-import { ExtractedArticle, AtomicNote } from "../types";
+import { ExtractedArticle, AtomicNote, DialogueTranscript, TranscriptEntry } from "../types";
 import { CONTENT } from "../constants";
 
 export class ApprovalModal extends Modal {
@@ -10,18 +10,27 @@ export class ApprovalModal extends Modal {
   private notes: AtomicNote[];
   private selectedNotes: Set<AtomicNote>;
   private statsEl: HTMLElement;
+  private transcript: DialogueTranscript;
+  private interpretationRounds: number;
+  private refinementRounds: number;
 
   constructor(
     app: App,
     plugin: DistillPlugin,
     article: ExtractedArticle,
-    notes: AtomicNote[]
+    notes: AtomicNote[],
+    transcript: DialogueTranscript,
+    interpretationRounds: number,
+    refinementRounds: number
   ) {
     super(app);
     this.plugin = plugin;
     this.article = article;
     this.notes = notes;
     this.selectedNotes = new Set(notes); // All selected by default
+    this.transcript = transcript;
+    this.interpretationRounds = interpretationRounds;
+    this.refinementRounds = refinementRounds;
   }
 
   onOpen(): void {
@@ -54,6 +63,9 @@ export class ApprovalModal extends Modal {
     for (const note of this.notes) {
       this.renderNoteItem(listContainer, note);
     }
+
+    // Collapsible transcript section
+    this.renderTranscriptSection(contentEl);
 
     // Action buttons
     const buttonContainer = contentEl.createDiv({ cls: "distill-button-container" });
@@ -176,6 +188,70 @@ export class ApprovalModal extends Modal {
       const message = error instanceof Error ? error.message : "Unknown error";
       new Notice(`Failed to save notes: ${message}`);
     }
+  }
+
+  private renderTranscriptSection(container: HTMLElement): void {
+    const section = container.createDiv({ cls: "distill-transcript-section" });
+
+    // Collapsible header
+    const header = section.createDiv({ cls: "distill-transcript-header" });
+    const toggle = header.createSpan({ cls: "distill-transcript-toggle", text: "▶" });
+    header.createSpan({
+      text: ` Show dialogue (${this.interpretationRounds} interpretation, ${this.refinementRounds} refinement rounds)`,
+    });
+
+    // Collapsible content (hidden by default)
+    const content = section.createDiv({ cls: "distill-transcript-content" });
+    content.style.display = "none";
+
+    // Toggle behavior
+    header.addEventListener("click", () => {
+      const isHidden = content.style.display === "none";
+      content.style.display = isHidden ? "block" : "none";
+      toggle.setText(isHidden ? "▼" : "▶");
+    });
+
+    // Render interpretation phase
+    if (this.transcript.interpretation.length > 0) {
+      const interpSection = content.createDiv({ cls: "distill-transcript-phase" });
+      interpSection.createEl("h4", { text: "Interpretation Phase" });
+      this.renderTranscriptEntries(interpSection, this.transcript.interpretation);
+    }
+
+    // Render refinement phase
+    if (this.transcript.refinement.length > 0) {
+      const refineSection = content.createDiv({ cls: "distill-transcript-phase" });
+      refineSection.createEl("h4", { text: "Refinement Phase" });
+      this.renderTranscriptEntries(refineSection, this.transcript.refinement);
+    }
+  }
+
+  private renderTranscriptEntries(container: HTMLElement, entries: TranscriptEntry[]): void {
+    for (const entry of entries) {
+      const entryEl = container.createDiv({ cls: `distill-transcript-entry distill-role-${entry.role}` });
+
+      // Entry header
+      const headerEl = entryEl.createDiv({ cls: "distill-transcript-entry-header" });
+      const roleLabel = entry.role === "drafter" ? "GPT (Drafter)" : "Claude (Critic)";
+      const typeLabel = this.getEntryTypeLabel(entry.type);
+      headerEl.createSpan({ text: `${roleLabel} — ${typeLabel}`, cls: "distill-transcript-role" });
+      headerEl.createSpan({ text: ` Round ${entry.round}`, cls: "distill-transcript-round" });
+
+      // Entry content
+      const contentEl = entryEl.createDiv({ cls: "distill-transcript-entry-content" });
+      contentEl.setText(entry.content);
+    }
+  }
+
+  private getEntryTypeLabel(type: TranscriptEntry["type"]): string {
+    const labels: Record<TranscriptEntry["type"], string> = {
+      "interpretation": "Initial Interpretation",
+      "alignment-check": "Alignment Check",
+      "draft": "Draft",
+      "critique": "Critique",
+      "revision": "Revision",
+    };
+    return labels[type] || type;
   }
 
   onClose(): void {

@@ -3,6 +3,7 @@ import {
   ExtractedArticle,
   ProgressCallback,
   CancellationToken,
+  TranscriptEntry,
 } from "../types";
 import { CONTENT, DIALOGUE } from "../constants";
 
@@ -12,6 +13,7 @@ export interface InterpretationResult {
   gptInterpretation: string;
   claudeInterpretation: string;
   rounds: number;
+  transcript: TranscriptEntry[];
 }
 
 const INTERPRETATION_PROMPT = `Read this article and provide your interpretation. Focus on:
@@ -97,6 +99,24 @@ export class InterpretationPhase {
       throw new Error("Cancelled");
     }
 
+    // Initialize transcript
+    const transcript: TranscriptEntry[] = [
+      {
+        phase: "interpretation",
+        role: "drafter",
+        type: "interpretation",
+        content: gptInterpretation,
+        round: 1,
+      },
+      {
+        phase: "interpretation",
+        role: "critic",
+        type: "interpretation",
+        content: claudeInterpretation,
+        round: 1,
+      },
+    ];
+
     // Step 2: Alignment loop - exchange interpretations until convergence
     let currentGptInterpretation = gptInterpretation;
     let currentClaudeInterpretation = claudeInterpretation;
@@ -133,6 +153,15 @@ export class InterpretationPhase {
         throw new Error("Cancelled");
       }
 
+      // Add Claude's alignment check to transcript
+      transcript.push({
+        phase: "interpretation",
+        role: "critic",
+        type: "alignment-check",
+        content: claudeResponse,
+        round: round + 1,
+      });
+
       // Check if Claude signals alignment (must start with ALIGNED)
       if (this.isAligned(claudeResponse)) {
         const alignedSummary = this.extractAlignedSummary(claudeResponse, currentGptInterpretation);
@@ -142,6 +171,7 @@ export class InterpretationPhase {
           gptInterpretation: currentGptInterpretation,
           claudeInterpretation: currentClaudeInterpretation,
           rounds: round + 1,
+          transcript,
         };
       }
 
@@ -172,6 +202,15 @@ export class InterpretationPhase {
         throw new Error("Cancelled");
       }
 
+      // Add GPT's alignment check to transcript
+      transcript.push({
+        phase: "interpretation",
+        role: "drafter",
+        type: "alignment-check",
+        content: gptResponse,
+        round: round + 1,
+      });
+
       // Check if GPT signals alignment
       if (this.isAligned(gptResponse)) {
         const alignedSummary = this.extractAlignedSummary(gptResponse, currentClaudeInterpretation);
@@ -181,6 +220,7 @@ export class InterpretationPhase {
           gptInterpretation: currentGptInterpretation,
           claudeInterpretation: currentClaudeInterpretation,
           rounds: round + 1,
+          transcript,
         };
       }
 
@@ -200,6 +240,7 @@ export class InterpretationPhase {
       gptInterpretation: currentGptInterpretation,
       claudeInterpretation: currentClaudeInterpretation,
       rounds: this.maxRounds,
+      transcript,
     };
   }
 

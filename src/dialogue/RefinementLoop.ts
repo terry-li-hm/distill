@@ -5,6 +5,7 @@ import {
   AtomicNote,
   ProgressCallback,
   CancellationToken,
+  TranscriptEntry,
 } from "../types";
 import { DIALOGUE } from "../constants";
 
@@ -12,6 +13,7 @@ export interface RefinementResult {
   notes: AtomicNote[];
   rounds: number;
   approved: boolean;
+  transcript: TranscriptEntry[];
 }
 
 const DRAFT_PROMPT = `Based on this interpretation of the article "{title}":
@@ -121,6 +123,17 @@ export class RefinementLoop {
       throw new Error("Cancelled");
     }
 
+    // Initialize transcript with initial draft
+    const transcript: TranscriptEntry[] = [
+      {
+        phase: "refinement",
+        role: "drafter",
+        type: "draft",
+        content: currentDraft,
+        round: 1,
+      },
+    ];
+
     let currentNotes = this.parser.parse(currentDraft);
     let round = 0;
 
@@ -152,6 +165,15 @@ export class RefinementLoop {
         throw new Error("Cancelled");
       }
 
+      // Add critique to transcript
+      transcript.push({
+        phase: "refinement",
+        role: "critic",
+        type: "critique",
+        content: critique,
+        round: round + 1,
+      });
+
       // Check if approved or marginal (strict matching)
       const status = this.parseCritiqueStatus(critique);
 
@@ -160,6 +182,7 @@ export class RefinementLoop {
           notes: currentNotes,
           rounds: round + 1,
           approved: true,
+          transcript,
         };
       }
 
@@ -195,6 +218,15 @@ export class RefinementLoop {
         throw new Error("Cancelled");
       }
 
+      // Add revision to transcript
+      transcript.push({
+        phase: "refinement",
+        role: "drafter",
+        type: "revision",
+        content: currentDraft,
+        round: round + 1,
+      });
+
       currentNotes = this.parser.parse(currentDraft);
     }
 
@@ -203,6 +235,7 @@ export class RefinementLoop {
       notes: currentNotes,
       rounds: this.maxRounds,
       approved: false,
+      transcript,
     };
   }
 

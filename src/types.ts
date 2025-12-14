@@ -83,6 +83,24 @@ export interface DialogueResult {
   state: DialogueState;
   atomicNotes: AtomicNote[];
   totalApiCalls: number;
+  transcript: DialogueTranscript;
+}
+
+// =============================================================================
+// Transcript
+// =============================================================================
+
+export interface TranscriptEntry {
+  phase: "interpretation" | "refinement";
+  role: "drafter" | "critic";
+  type: "interpretation" | "alignment-check" | "draft" | "critique" | "revision";
+  content: string;
+  round: number;
+}
+
+export interface DialogueTranscript {
+  interpretation: TranscriptEntry[];
+  refinement: TranscriptEntry[];
 }
 
 // =============================================================================

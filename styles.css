@@ -214,3 +214,97 @@
 .distill-help p:last-child {
   margin-bottom: 0;
 }
+
+/* =============================================================================
+   Transcript Section
+   ============================================================================= */
+
+.distill-transcript-section {
+  margin-top: 1rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+}
+
+.distill-transcript-header {
+  padding: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 0.9em;
+  transition: background-color 0.15s ease;
+}
+
+.distill-transcript-header:hover {
+  background: var(--background-secondary);
+}
+
+.distill-transcript-toggle {
+  font-family: monospace;
+  margin-right: 0.25rem;
+  font-size: 0.8em;
+}
+
+.distill-transcript-content {
+  border-top: 1px solid var(--background-modifier-border);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.distill-transcript-phase {
+  padding: 0.75rem;
+}
+
+.distill-transcript-phase h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--text-normal);
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 0.5rem;
+}
+
+.distill-transcript-phase + .distill-transcript-phase {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.distill-transcript-entry {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 4px;
+  background: var(--background-secondary);
+}
+
+.distill-transcript-entry:last-child {
+  margin-bottom: 0;
+}
+
+.distill-transcript-entry-header {
+  margin-bottom: 0.5rem;
+  font-size: 0.85em;
+}
+
+.distill-transcript-role {
+  font-weight: 600;
+}
+
+.distill-transcript-round {
+  color: var(--text-muted);
+}
+
+.distill-transcript-entry-content {
+  font-size: 0.9em;
+  line-height: 1.5;
+  color: var(--text-normal);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Role-specific styling */
+.distill-role-drafter {
+  border-left: 3px solid var(--color-green);
+}
+
+.distill-role-critic {
+  border-left: 3px solid var(--color-orange);
+}
